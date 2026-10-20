@@ -105,7 +105,10 @@ app = Client(
     bot_token=bot_token,
     api_id=api_id,
     api_hash=api_hash,
-    plugins={"root": str(BASE_DIR / "VideoEncoder/plugins")},
+    # Pyrogram converts the root into a dotted import path.  This must be a
+    # package name, not an absolute filesystem path (e.g. /app/... would be
+    # interpreted as the invalid module .app.VideoEncoder.plugins).
+    plugins={"root": "VideoEncoder.plugins"},
     sleep_threshold=30,
     max_concurrent_transmissions=16,
     workers=16,
