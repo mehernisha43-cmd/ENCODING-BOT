@@ -326,22 +326,22 @@ async def callback_handlers(bot: Client, cb: CallbackQuery):
         # Cancel
 
         elif cb.data == "cancel":
-            status = download_dir + "status.json"
+            status = os.path.join(download_dir, "status.json")
             try:
                 with open(status, 'r+') as f:
                     statusMsg = json.load(f)
                     user = cb.from_user.id
                     if user != statusMsg['user']:
-                        if user == 885190545:
-                            pass
-                        elif user in sudo_users or user in owner:
+                        if user in sudo_users or user in owner:
                             pass
                         else:
                             return
                     statusMsg['running'] = False
                     f.seek(0)
                     json.dump(statusMsg, f, indent=2)
-                    os.remove('VideoEncoder/utils/extras/downloads/process.txt')
+                    progress_file = os.path.join(download_dir, 'process.txt')
+                    if os.path.exists(progress_file):
+                        os.remove(progress_file)
                     try:
                         await cb.message.edit_text("🚦🚦 Process Cancelled 🚦🚦")
                         chat_id = log
@@ -353,7 +353,8 @@ async def callback_handlers(bot: Client, cb: CallbackQuery):
                             datetime.timedelta(minutes=00, hours=6)
                         bst = bst_now.strftime("%d/%m/%Y, %H:%M:%S")
                         now = f"\n{ist} (GMT+05:30)`\n`{bst} (GMT+06:00)"
-                        await bot.send_message(chat_id, f"**Last Process Cancelled, Bot is Free Now !!** \n\nProcess Done at `{now}`", parse_mode="markdown")
+                        if chat_id is not None:
+                            await bot.send_message(chat_id, f"**Last Process Cancelled, Bot is Free Now !!** \n\nProcess Done at `{now}`", parse_mode="markdown")
                     except:
                         pass
             except FileNotFoundError:
