@@ -7,14 +7,13 @@ import time
 from datetime import datetime
 from urllib.parse import unquote_plus
 
-from httpx import delete
 from pyrogram.errors.exceptions.bad_request_400 import (MessageIdInvalid,
                                                         MessageNotModified)
 from pyrogram.parser import html as pyrogram_html
 from pyrogram.types import Message
 from requests.utils import unquote
 
-from .. import LOGGER, data, download_dir, video_mimetype
+from .. import LOGGER, data, download_dir, video_mimetype, max_concurrent_encodings
 from .database.access_db import db
 from .direct_link_generator import direct_link_generator
 from .display_progress import progress_for_pyrogram
@@ -23,6 +22,8 @@ from .uploads.drive import _get_file_id
 from .uploads.drive.download import Downloader
 from .encoding import get_media_streams
 from ..video_utils.audio_selector import AudioSelect
+
+encoding_semaphore = asyncio.Semaphore(max_concurrent_encodings)
 
 async def on_task_complete():
     delete_downloads()
@@ -69,14 +70,15 @@ async def on_task_complete():
 async def handle_tasks(message, mode):
     try:
         msg = await message.reply_text("<b>💠 Downloading...</b>")
-        if mode == 'tg':
-            await tg_task(message, msg)
-        elif mode == 'url':
-            await url_task(message, msg)
-        elif mode == 'af':
-            await af_task(message, msg)
-        else:
-            await batch_task(message, msg)
+        async with encoding_semaphore:
+            if mode == 'tg':
+                await tg_task(message, msg)
+            elif mode == 'url':
+                await url_task(message, msg)
+            elif mode == 'af':
+                await af_task(message, msg)
+            else:
+                await batch_task(message, msg)
     except MessageNotModified:
         pass
     except IndexError:
@@ -234,6 +236,7 @@ async def handle_download_url(message, msg, batch):
     if not custom_file_name:
         custom_file_name = "downloaded_file"
 
+    custom_file_name = os.path.basename(custom_file_name).strip() or "downloaded_file"
     path = os.path.join(download_dir, custom_file_name)
     filepath = path
     if 'drive.google.com' in url:

@@ -4,7 +4,6 @@ import asyncio
 import os
 import shutil
 
-from pyrogram.errors.exceptions.bad_request_400 import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from pySmartDL import SmartDL
 
@@ -30,7 +29,7 @@ async def check_chat(message, chat):
     user_id = message.from_user.id
     get_sudo = await db.get_sudo()
     get_auth = await db.get_chat()
-    if user_id in owner or user_id == 885190545:
+    if user_id in owner:
         title = 'God'
     elif user_id in sudo_users or chat_id in sudo_users:
         title = 'Sudo'
@@ -58,50 +57,55 @@ async def handle_url(url, filepath, msg):
     downloader.start(blocking=False)
     while not downloader.isFinished():
         await progress_for_url(downloader, msg)
+        await asyncio.sleep(1)
+    if not os.path.isfile(filepath) or os.path.getsize(filepath) == 0:
+        raise RuntimeError("Download completed without producing a file")
 
 
 async def handle_encode(filepath, message, msg, audio_map=None):
-    if await db.get_hardsub(message.from_user.id):
-        subs = await extract_subs(filepath, msg, message.from_user.id)
-        if not subs:
-            await msg.edit("Something went wrong while extracting the subtitles!")
-            return
-    new_file = await encode(filepath, message, msg, audio_map=audio_map)
-    if new_file:
-        await msg.edit("<code>Video Encoded, getting metadata...</code>")
+    new_file = None
+    try:
+        if await db.get_hardsub(message.from_user.id):
+            subs = await extract_subs(filepath, msg, message.from_user.id)
+            if not subs:
+                await msg.edit("No supported text subtitles were found for hardsubbing.")
+                return None
+        new_file = await encode(filepath, message, msg, audio_map=audio_map)
+        if not new_file:
+            await msg.edit("Encoding failed; FFmpeg did not produce a valid output file.")
+            return None
+        await msg.edit("<code>Video Encoded, uploading...</code>")
+        link = await upload_worker(new_file, message, msg)
+        await msg.edit('Video Encoded Successfully! Link: {}'.format(link))
+        return link
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("Encoding/upload task failed")
         try:
-            link = await upload_worker(new_file, message, msg)
-            await msg.edit('Video Encoded Successfully! Link: {}'.format(link))
-        except Exception as e:
-            await msg.edit(f"Error while uploading: {e}")
-            link = None
-
-        # Immediate cleanup after upload
-        try:
-            os.remove(new_file)
-            os.remove(filepath)
+            await msg.edit(f"Encoding/upload failed: {exc}")
         except Exception:
             pass
-
-    else:
-        await message.reply("<code>Something wents wrong while encoding your file.</code>")
-        try:
-            os.remove(filepath)
-        except Exception:
-            pass
-        link = None
-
-    return link
+        return None
+    finally:
+        for path in (new_file, filepath, os.path.join(encode_dir, str(getattr(msg, 'id', '')) + '.ass')):
+            if path and os.path.isfile(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
 
 
 async def handle_extract(archieve):
     # get current directory
     path = os.getcwd()
     archieve = os.path.join(path, archieve)
-    cmd = [f'./extract', archieve]
+    cmd = [os.path.join(path, 'extract'), archieve]
     rio = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    await rio.communicate()
-    os.remove(archieve)
+    _, stderr = await rio.communicate()
+    if rio.returncode != 0:
+        raise RuntimeError(f"Archive extraction failed: {stderr.decode(errors='replace')[-500:]}")
+    if os.path.isfile(archieve):
+        os.remove(archieve)
     return path
 
 
