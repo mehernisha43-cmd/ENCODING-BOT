@@ -11,7 +11,8 @@ dns.resolver.default_resolver.nameservers = [
 
 async def main():
     await app.start()
-    await app.send_message(chat_id=log, text=f'<b>Bot Started! @{(await app.get_me()).username}</b>')
+    if log is not None:
+        await app.send_message(chat_id=log, text=f'<b>Bot Started! @{(await app.get_me()).username}</b>')
     await idle()
     await app.stop()
 
