@@ -1,6 +1,7 @@
 # Required
 pyrofork
 TgCrypto
+setuptools>=68,<81
 python-dotenv
 hachoir
 beautifulsoup4==4.9.1
